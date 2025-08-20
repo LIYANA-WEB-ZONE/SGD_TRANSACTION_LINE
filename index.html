@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monthly Income Tracker</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen font-sans">
+
+<header class="bg-cyan-600 text-white p-6 text-center text-3xl font-extrabold shadow-md">
+  # Monthly Income Tracker
+</header>
+
+<main class="max-w-5xl mx-auto p-6 space-y-6">
+
+  <!-- Select Month + Balance -->
+  <div class="bg-white p-8 rounded-3xl shadow-lg">
+    <h2 class="text-2xl font-bold mb-4">## Select Month</h2>
+    <div class="flex flex-wrap items-center gap-4 mb-4">
+      <input id="month-select" type="month" class="p-3 border rounded-lg shadow-sm flex-1 min-w-[220px]" onchange="updateMonth()" />
+      <button onclick="setThisMonth()" class="bg-gray-200 px-4 py-2 rounded-lg border hover:bg-gray-300 transition">This Month</button>
+      <button onclick="showAllMonths()" class="bg-red-100 px-4 py-2 rounded-lg border hover:bg-red-200 transition">All Months</button>
+    </div>
+    <h3 class="text-xl font-semibold text-gray-700 mb-3">
+      ### TOTAL BALANCE - <span id="selected-month">AUGUST 2025</span>
+    </h3>
+    <div class="flex justify-between items-center text-lg font-semibold">
+      <span class="text-green-600">SGD: <span id="bal-sgd">0.00</span></span>
+      <span class="text-blue-600">LKR: <span id="bal-lkr">0.00</span></span>
+    </div>
+  </div>
+
+  <!-- Rate Panel -->
+  <div class="bg-white p-8 rounded-3xl shadow-lg">
+    <h2 class="text-2xl font-bold mb-4">## Exchange Rate</h2>
+    <div class="flex gap-4 mb-3 flex-wrap">
+      <input id="rate" type="number" placeholder="Enter Live Rate" class="p-3 border rounded-lg shadow-sm flex-1 min-w-[150px]">
+      <button onclick="setRate()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition">Set Rate</button>
+    </div>
+    <p class="text-gray-600">Current Rate: <span id="current-rate">0.00</span></p>
+  </div>
+
+  <!-- Add Transaction -->
+  <div class="bg-white p-8 rounded-3xl shadow-lg">
+    <h2 class="text-2xl font-bold mb-4">## Add Transaction</h2>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="flex flex-col">
+        <label for="date" class="font-medium mb-1">Date</label>
+        <input id="date" type="date" class="p-3 border rounded-lg shadow-sm w-full">
+      </div>
+      <div class="flex flex-col">
+        <label for="amount" class="font-medium mb-1">Amount (SGD)</label>
+        <input id="amount" type="number" placeholder="Enter Amount (SGD)" class="p-3 border rounded-lg shadow-sm w-full">
+      </div>
+      <button onclick="addTransaction()" class="bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 transition mt-6 md:mt-10">Add</button>
+    </div>
+  </div>
+
+  <!-- Transactions Table -->
+  <div class="bg-white p-8 rounded-3xl shadow-lg overflow-x-auto">
+    <h2 class="text-2xl font-bold mb-4">## Transactions</h2>
+    <table class="w-full border-collapse table-auto">
+      <thead>
+        <tr class="bg-gray-200 text-left">
+          <th class="border p-3">Date</th>
+          <th class="border p-3">SGD</th>
+          <th class="border p-3">LKR</th>
+        </tr>
+      </thead>
+      <tbody id="transaction-body">
+        <!-- Transactions appear here -->
+      </tbody>
+    </table>
+  </div>
+
+</main>
+
+<script>
+const API_URL = "YOUR_WEB_APP_URL"; // replace with your Google Apps Script Web App URL
+let transactions = [];
+let liveRate = 0;
+
+async function loadTransactions(){
+  const res = await fetch(API_URL+"?action=getTransactions");
+  transactions = await res.json();
+  updateMonth();
+}
+
+async function getMonthRate(month){
+  const res = await fetch(API_URL+"?action=getRate&month="+month);
+  const rate = parseFloat(await res.text());
+  return rate || 0;
+}
+
+async function setRate(){
+  const rateInput = parseFloat(document.getElementById("rate").value);
+  if(isNaN(rateInput) || rateInput<=0){ alert("Enter valid rate"); return;}
+  const selected = document.getElementById("month-select").value;
+  if(!selected){ alert("Select month first"); return; }
+  liveRate = rateInput;
+  document.getElementById("rate").value = "";
+  updateMonth();
+}
+
+async function addTransaction(){
+  const amount = parseFloat(document.getElementById("amount").value);
+  const date = document.getElementById("date").value;
+  if(isNaN(amount) || !date){ alert("Enter all fields"); return;}
+
+  let rateInput = parseFloat(document.getElementById("rate").value);
+  if(isNaN(rateInput) || rateInput <= 0){ rateInput = liveRate; } 
+  else { liveRate = rateInput; document.getElementById("rate").value=""; }
+
+  const lkr = amount*rateInput;
+
+  await fetch(API_URL, {method:"POST",body:JSON.stringify({date,amount_sgd:amount,rate:rateInput,amount_lkr:lkr}),headers:{"Content-Type":"application/json"}});
+  document.getElementById("amount").value="";
+  document.getElementById("date").value="";
+  await loadTransactions();
+}
+
+function setThisMonth(){
+  const today = new Date();
+  document.getElementById("month-select").value = today.toISOString().slice(0,7);
+  updateMonth();
+}
+
+function showAllMonths(){
+  document.getElementById("month-select").value = "";
+  updateMonth();
+}
+
+async function updateMonth(){
+  const selected = document.getElementById("month-select").value;
+  let filtered, monthLabel;
+
+  if(selected){
+    const [year,month] = selected.split("-");
+    const monthNames = ["JANUARY","FEBRUARY","MARCH","APRIL","MAY","JUNE","JULY","AUGUST","SEPTEMBER","OCTOBER","NOVEMBER","DECEMBER"];
+    monthLabel = monthNames[parseInt(month)-1]+" "+year;
+    filtered = transactions.filter(t=>{ const d=new Date(t.date); return d.getMonth()===parseInt(month)-1 && d.getFullYear()===parseInt(year); });
+    liveRate = await getMonthRate(selected);
+  } else {
+    monthLabel="ALL MONTHS";
+    filtered = transactions;
+    liveRate = transactions.length>0? transactions[transactions.length-1].rate : 0;
+  }
+
+  document.getElementById("selected-month").textContent = monthLabel;
+  document.getElementById("bal-sgd").textContent = filtered.reduce((a,t)=>a+t.amount_sgd,0).toFixed(2);
+  document.getElementById("bal-lkr").textContent = filtered.reduce((a,t)=>a+t.amount_lkr,0).toFixed(2);
+  document.getElementById("transaction-body").innerHTML = filtered.map(t=>`<tr class="hover:bg-gray-100"><td class="border p-3">${t.date}</td><td class="border p-3">${t.amount_sgd.toFixed(2)}</td><td class="border p-3">${t.amount_lkr.toFixed(2)}</td></tr>`).join("");
+  document.getElementById("current-rate").textContent = liveRate.toFixed(2);
+}
+
+window.onload = loadTransactions;
+</script>
+</body>
+</html>
